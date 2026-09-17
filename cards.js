@@ -2,7 +2,7 @@ const path = require("path");
 const { EmbedBuilder, AttachmentBuilder } = require("discord.js");
 const { vehicles } = require("./vehicles");
 
-const VEHICLE_ASSET_DIR = path.join(__dirname, "..", "assets", "vehicles");
+const VEHICLE_ASSET_DIR = __dirname;
 
 function hours(seconds) {
   return (Number(seconds || 0) / 3600).toFixed(1);
