@@ -327,13 +327,30 @@ if (message.content.startsWith("?unmute")) {
 
   setInstagram(message.author.id, message.guild.id, username);
 
-  return message.reply(`✅ Instagram username set to ${username}`);
+const role = message.guild.roles.cache.find(
+  r => r.name === "Instagram user"
+);
+
+if (role) {
+  await message.member.roles.add(role);
+}
+
+return message.reply(`✅ Instagram username set to ${username}`);
 }
 
 if (message.content.startsWith("?removeinsta")) {
   removeInstagram(message.author.id, message.guild.id);
 
+  const role = message.guild.roles.cache.find(
+    r => r.name === "Instagram user"
+  );
+
+  if (role) {
+    await message.member.roles.remove(role);
+  }
+
   return message.reply("✅ Instagram username removed.");
+}
 }
 
 if (message.content.startsWith("?insta")) {
@@ -448,6 +465,24 @@ client.on("voiceStateUpdate", async (oldState, newState) => {
     // remains untouched.
   } catch (err) {
     console.error("voiceStateUpdate error:", err);
+  }
+});
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+  const role = newMember.guild.roles.cache.find(
+    r => r.name === "Instagram user"
+  );
+
+  if (!role) return;
+
+  const hadRole = oldMember.roles.cache.has(role.id);
+  const hasRole = newMember.roles.cache.has(role.id);
+
+  if (hadRole && !hasRole) {
+    removeInstagram(newMember.id, newMember.guild.id);
+
+    console.log(
+      `Instagram removed for ${newMember.user.tag} because role was removed`
+    );
   }
 });
 
