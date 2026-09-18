@@ -573,6 +573,83 @@ client.on(
        MUTE
     ========================= */
 
+    if (message.content.startsWith("?giverole")) {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    return message.reply("❌ You don't have permission to manage roles.");
+  }
+
+  const target = message.mentions.members.first();
+  const role = message.mentions.roles.first();
+
+  if (!target) {
+    return message.reply("❌ Please mention the user.");
+  }
+
+  if (!role) {
+    return message.reply("❌ Please mention the role.");
+  }
+
+  if (role.managed) {
+    return message.reply("❌ I can't manage this role.");
+  }
+
+  if (role.position >= message.guild.members.me.roles.highest.position) {
+    return message.reply("❌ I can't manage this role because it is above or equal to my highest role.");
+  }
+
+  try {
+    await target.roles.add(role);
+
+    return message.channel.send(
+      `✅ Added ${role} to ${target}.`
+    );
+  } catch (err) {
+    console.error("Give role error:", err);
+
+    return message.reply(
+      "❌ I couldn't give that role. Check my permissions and role position."
+    );
+  }
+}
+
+if (message.content.startsWith("?removerole")) {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    return message.reply("❌ You don't have permission to manage roles.");
+  }
+
+  const target = message.mentions.members.first();
+  const role = message.mentions.roles.first();
+
+  if (!target) {
+    return message.reply("❌ Please mention the user.");
+  }
+
+  if (!role) {
+    return message.reply("❌ Please mention the role.");
+  }
+
+  if (role.managed) {
+    return message.reply("❌ I can't manage this role.");
+  }
+
+  if (role.position >= message.guild.members.me.roles.highest.position) {
+    return message.reply("❌ I can't manage this role because it is above or equal to my highest role.");
+  }
+
+  try {
+    await target.roles.remove(role);
+
+    return message.channel.send(
+      `✅ Removed ${role} from ${target}.`
+    );
+  } catch (err) {
+    console.error("Remove role error:", err);
+
+    return message.reply(
+      "❌ I couldn't remove that role. Check my permissions and role position."
+    );
+  }
+}
     if (
       message.content.startsWith("?mute")
     ) {
