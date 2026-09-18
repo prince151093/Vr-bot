@@ -9,6 +9,7 @@ const {
 const giveawayEntries = new Map();
 
 module.exports = {
+    giveawayEntries,
     data: new SlashCommandBuilder()
         .setName("giveaway")
         .setDescription("Create a giveaway")
