@@ -1,3 +1,4 @@
+/* Vehicle Life - Discord connection diagnostics enabled */
 const giveawayCommand = require("./src/commands/giveaway");
 const http = require("http");
 
@@ -115,6 +116,33 @@ client.on("warn", warning => {
 
 client.on("debug", message => {
   console.log("DISCORD DEBUG:", message);
+});
+
+// Gateway lifecycle diagnostics
+client.on("shardReady", (id, unavailableGuilds) => {
+  console.log(
+    `DISCORD SHARD READY: shard=${id} unavailableGuilds=${unavailableGuilds ? unavailableGuilds.size : 0}`
+  );
+});
+
+client.on("shardReconnecting", id => {
+  console.log(`DISCORD SHARD RECONNECTING: shard=${id}`);
+});
+
+client.on("shardDisconnect", (closeEvent, id) => {
+  console.error(
+    `DISCORD SHARD DISCONNECT: shard=${id} code=${closeEvent?.code ?? "unknown"} reason=${closeEvent?.reason || "unknown"}`
+  );
+});
+
+client.on("shardResume", (id, replayedEvents) => {
+  console.log(
+    `DISCORD SHARD RESUMED: shard=${id} replayedEvents=${replayedEvents}`
+  );
+});
+
+client.on("invalidated", () => {
+  console.error("DISCORD SESSION INVALIDATED: Discord invalidated the gateway session.");
 });
 
 /* =========================
@@ -306,7 +334,10 @@ function restoreActiveVoiceSessions() {
 
 client.once("clientReady", async () => {
   console.log(
-    `Logged in as ${client.user.tag}`
+    `DISCORD READY: Logged in as ${client.user.tag}`
+  );
+  console.log(
+    `DISCORD READY DETAILS: userId=${client.user.id} guilds=${client.guilds.cache.size}`
   );
 
   try {
@@ -1195,7 +1226,11 @@ client.on(
 client.on(
   "interactionCreate",
   async interaction => {
-    console.log(`INTERACTION RECEIVED: ${interaction.type} ${interaction.commandName || interaction.customId || "unknown"}`);
+    const interactionAgeMs = Date.now() - interaction.createdTimestamp;
+
+    console.log(
+      `INTERACTION RECEIVED: type=${interaction.type} command=${interaction.commandName || ""} customId=${interaction.customId || ""} id=${interaction.id} ageMs=${interactionAgeMs}`
+    );
 
     try {
 
@@ -1536,7 +1571,15 @@ client.on(
          NORMAL SLASH COMMANDS
       ========================= */
 
+      console.log(
+        `INTERACTION BEFORE DEFER: command=${interaction.commandName || "unknown"} id=${interaction.id} ageMs=${Date.now() - interaction.createdTimestamp}`
+      );
+
       await interaction.deferReply();
+
+      console.log(
+        `INTERACTION AFTER DEFER: command=${interaction.commandName || "unknown"} id=${interaction.id} ageMs=${Date.now() - interaction.createdTimestamp}`
+      );
 
       const user =
         getUser(
@@ -1831,12 +1874,25 @@ client.on(
 
 async function start() {
 
+  const startupStartedAt = Date.now();
+
   try {
 
+    console.log("START: Initializing database...");
     await initDb();
+    console.log(
+      `START: Database initialized in ${Date.now() - startupStartedAt}ms.`
+    );
+
+    console.log("START: Attempting Discord login...");
+    const loginStartedAt = Date.now();
 
     await client.login(
       config.token
+    );
+
+    console.log(
+      `START: Discord login() completed in ${Date.now() - loginStartedAt}ms.`
     );
 
   } catch (err) {
@@ -1875,10 +1931,31 @@ process.on(
 );
 
 /* =========================
+   PROCESS LIFECYCLE DIAGNOSTICS
+========================= */
+
+process.on("beforeExit", code => {
+  console.log(`PROCESS beforeExit: code=${code}`);
+});
+
+process.on("exit", code => {
+  console.log(`PROCESS exit: code=${code}`);
+});
+
+/* =========================
    SHUTDOWN
 ========================= */
 
+let shuttingDown = false;
+
 async function shutdown(signal) {
+
+  if (shuttingDown) {
+    console.log(`Shutdown already in progress; ignoring ${signal}.`);
+    return;
+  }
+
+  shuttingDown = true;
 
   console.log(
     `${signal} received. Saving data and shutting down...`
@@ -1914,3 +1991,4 @@ process.on(
   "SIGTERM",
   () => shutdown("SIGTERM")
 );
+
