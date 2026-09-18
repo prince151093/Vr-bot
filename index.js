@@ -249,6 +249,69 @@ client.on("messageCreate", async message => {
     );
   }
   }
+  if (message.content.startsWith("?mute")) {
+  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return message.reply("❌ You don't have permission to mute members.");
+  }
+
+  const target = message.mentions.members.first();
+
+  if (!target) {
+    return message.reply("❌ Please mention a user.");
+  }
+
+  const duration = message.content.split(" ")[2];
+
+  if (!duration) {
+    return message.reply("❌ Please provide a duration (60s, 5m, 4h, 2d).");
+  }
+
+  let ms = 0;
+
+  if (duration.endsWith("s")) ms = parseInt(duration) * 1000;
+  else if (duration.endsWith("m")) ms = parseInt(duration) * 60 * 1000;
+  else if (duration.endsWith("h")) ms = parseInt(duration) * 60 * 60 * 1000;
+  else if (duration.endsWith("d")) ms = parseInt(duration) * 24 * 60 * 60 * 1000;
+  else {
+    return message.reply("❌ Invalid duration. Use s, m, h, or d.");
+  }
+
+  try {
+    await target.timeout(ms);
+
+    return message.channel.send(
+      `🔇 ${target} has been muted for ${duration}.`
+    );
+  } catch (err) {
+    return message.reply(
+      "❌ I can't mute that user. Check my permissions and role position."
+    );
+  }
+}
+
+if (message.content.startsWith("?unmute")) {
+  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return message.reply("❌ You don't have permission to unmute members.");
+  }
+
+  const target = message.mentions.members.first();
+
+  if (!target) {
+    return message.reply("❌ Please mention a user.");
+  }
+
+  try {
+    await target.timeout(null);
+
+    return message.channel.send(
+      `🔊 ${target} has been unmuted.`
+    );
+  } catch (err) {
+    return message.reply(
+      "❌ I can't unmute that user."
+    );
+  }
+}
 });
 // Track the latest profile message for each user so it can refresh automatically.
 const activeProfileMessages = new Map();
