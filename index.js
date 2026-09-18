@@ -345,13 +345,21 @@ if (message.content.startsWith("?removeinsta")) {
     r => r.name === "Instagram user"
   );
 
-  if (role) {
-    await message.member.roles.remove(role);
-  }
+  if (!role) {
+  return message.reply("❌ Role 'Instagram user' not found.");
+}
+
+try {
+  await message.member.roles.add(role);
+  console.log("Role added successfully");
+} catch (err) {
+  console.error(err);
+  return message.reply(`❌ Role error: ${err.message}`);
+}
 
   return message.reply("✅ Instagram username removed.");
 }
-}
+
 
 if (message.content.startsWith("?insta")) {
   const target = message.mentions.users.first() || message.author;
