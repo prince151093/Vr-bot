@@ -6,6 +6,7 @@ const {
     ButtonStyle,
     PermissionFlagsBits
 } = require("discord.js");
+const giveawayEntries = new Map();
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -70,8 +71,12 @@ module.exports = {
             .addComponents(button);
 
         await interaction.reply({
-            embeds: [embed],
-            components: [row]
-        });
+    embeds: [embed],
+    components: [row]
+});
+
+const giveawayMessage = await interaction.fetchReply();
+
+giveawayEntries.set(giveawayMessage.id, new Set());
     }
 };
