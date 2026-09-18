@@ -33,7 +33,8 @@ function normalizeUser(row) {
       row.last_vc_join === null || row.last_vc_join === undefined
         ? null
         : Number(row.last_vc_join),
-    updated_at: Number(row.updated_at || 0)
+    updated_at: Number(row.updated_at || 0),
+instagram: row.instagram || null
   };
 }
 
@@ -63,7 +64,7 @@ async function loadAllUsers() {
   while (true) {
     const { data: page, error } = await supabase
       .from(TABLE)
-      .select("user_id,guild_id,messages,vc_seconds,vehicle_index,last_vc_join,updated_at")
+      .select("user_id,guild_id,messages,vc_seconds,vehicle_index,last_vc_join,updated_at,instagram")
       .range(from, from + pageSize - 1);
 
     if (error) throw error;
@@ -134,7 +135,8 @@ function update(userId, guildId, changes) {
   const user = ensureUser(userId, guildId);
 
   Object.assign(user, changes, {
-    updated_at: Math.floor(Date.now() / 1000)
+    updated_at: Math.floor(Date.now() / 1000),
+instagram: null
   });
 
   queueSave(user);
@@ -234,6 +236,17 @@ async function close() {
 
   await saveQueue;
 }
+function setInstagram(userId, guildId, username) {
+  return update(userId, guildId, {
+    instagram: username
+  });
+}
+
+function removeInstagram(userId, guildId) {
+  return update(userId, guildId, {
+    instagram: null
+  });
+}
 
 module.exports = {
   init,
@@ -246,5 +259,7 @@ module.exports = {
   settleVcSession,
   setVehicleIndex,
   topUsers,
-  close
+setInstagram,
+removeInstagram,
+close
 };
