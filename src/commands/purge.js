@@ -1,35 +1,27 @@
-const {
-    SlashCommandBuilder,
-    PermissionFlagsBits
-} = require("discord.js");
+const { PermissionFlagsBits } = require("discord.js");
 
 module.exports = {
-    data: new SlashCommandBuilder()
-        .setName("purge")
-        .setDescription("Delete multiple messages from this channel")
-        .setDefaultMemberPermissions(
-            PermissionFlagsBits.ManageMessages
-        )
-        .addIntegerOption(option =>
-            option
-                .setName("amount")
-                .setDescription("Number of messages to delete")
-                .setMinValue(1)
-                .setMaxValue(100)
-                .setRequired(true)
-        ),
+    name: "purge",
 
-    async execute(interaction) {
-        const amount = interaction.options.getInteger("amount");
+    async execute(message, args) {
+        if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
+            return message.reply("❌ You need **Manage Messages** permission to use this command.");
+        }
 
-        const deleted = await interaction.channel.bulkDelete(
-            amount,
-            true
+        const amount = parseInt(args[0]);
+
+        if (!amount || amount < 1 || amount > 100) {
+            return message.reply("❌ Use: `?purge <1-100>`");
+        }
+
+        const deleted = await message.channel.bulkDelete(amount + 1, true);
+
+        const reply = await message.channel.send(
+            `🧹 Successfully deleted **${Math.max(deleted.size - 1, 0)}** messages.`
         );
 
-        return interaction.reply({
-            content: `🧹 Successfully deleted **${deleted.size}** messages.`,
-            ephemeral: true
-        });
+        setTimeout(() => {
+            reply.delete().catch(() => {});
+        }, 3000);
     }
 };
