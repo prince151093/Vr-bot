@@ -220,6 +220,35 @@ client.on("messageCreate", async message => {
     `✅ ${target} has been unwarned.`
   );
   }
+  if (message.content.startsWith("?setnick")) {
+  if (!message.member.permissions.has(PermissionFlagsBits.ManageNicknames)) {
+    return message.reply("❌ You don't have permission to change nicknames.");
+  }
+
+  const target = message.mentions.members.first();
+
+  if (!target) {
+    return message.reply("❌ Please mention a user.");
+  }
+
+  const nickname = message.content.split(" ").slice(2).join(" ");
+
+  if (!nickname) {
+    return message.reply("❌ Please provide a nickname.");
+  }
+
+  try {
+    await target.setNickname(nickname);
+
+    return message.channel.send(
+      `✅ Changed ${target}'s nickname to **${nickname}**`
+    );
+  } catch (err) {
+    return message.reply(
+      "❌ I can't change that user's nickname. Check my role position and permissions."
+    );
+  }
+  }
 });
 // Track the latest profile message for each user so it can refresh automatically.
 const activeProfileMessages = new Map();
