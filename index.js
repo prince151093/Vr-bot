@@ -533,6 +533,12 @@ client.on("interactionCreate", async interaction => {
     return interaction.update({ embeds: page.embeds, files: page.files, components: [row] });
   }
 
+  if (interaction.isButton() && interaction.customId === "giveaway_join") {
+    return interaction.reply({
+        content: "🎉 You have successfully entered the giveaway! Good luck! 🍀",
+        ephemeral: true
+    });
+  }
   if (interaction.isButton() && interaction.customId.startsWith("garage:")) {
     const [, direction, ownerId, pageText] = interaction.customId.split(":");
     if (interaction.user.id !== ownerId) {
