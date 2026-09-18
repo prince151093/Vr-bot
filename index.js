@@ -1,3 +1,4 @@
+const giveawayCommand = require("../commands/giveaway");
 const http = require("http");
 
 const {
