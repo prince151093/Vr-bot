@@ -12,11 +12,14 @@ const {
   ChannelType,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  EmbedBuilder
 } = require("discord.js");
 
 const config = require("./config");
+
 const { vehicles } = require("./vehicles");
+
 const {
   getUser,
   addMessage,
@@ -26,32 +29,54 @@ const {
   clearVcJoin,
   setVehicleIndex,
   topUsers,
-  setInstagram, 
-  removeInstagram, 
+  setInstagram,
+  removeInstagram,
   close: closeDb,
   init: initDb
 } = require("./db");
-const { profileEmbed, profileFiles, garagePage, topGaragesEmbed } = require("./cards");
+
+const {
+  profileEmbed,
+  profileFiles,
+  garagePage,
+  topGaragesEmbed
+} = require("./cards");
+
+
+/* =========================
+   CONFIG CHECK
+========================= */
 
 if (!config.token) {
   console.error("Missing DISCORD_TOKEN environment variable.");
   process.exit(1);
 }
+
 if (!config.clientId) {
   console.error("Missing CLIENT_ID environment variable.");
   process.exit(1);
 }
 
+
+/* =========================
+   HEALTH SERVER
+========================= */
+
 function startHealthServer() {
   const port = Number(process.env.PORT);
+
   if (!port) return;
 
   const server = http.createServer((req, res) => {
     if (req.url === "/health" || req.url === "/") {
-      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8"
+      });
+
       res.end("Vehicle Life is running\n");
       return;
     }
+
     res.writeHead(404);
     res.end("Not found\n");
   });
@@ -63,6 +88,11 @@ function startHealthServer() {
 
 startHealthServer();
 
+
+/* =========================
+   DISCORD CLIENT
+========================= */
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -71,16 +101,26 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates
   ],
-  partials: [Partials.Channel]
+
+  partials: [
+    Partials.Channel
+  ]
 });
+
+
+/* =========================
+   SLASH COMMANDS
+========================= */
 
 const commands = [
   new SlashCommandBuilder()
     .setName("profile")
     .setDescription("View your Vehicle Life profile"),
+
   new SlashCommandBuilder()
     .setName("garage")
     .setDescription("View your complete vehicle collection"),
+
   new SlashCommandBuilder()
     .setName("viewgarage")
     .setDescription("View another member's vehicle collection")
@@ -90,640 +130,1831 @@ const commands = [
         .setDescription("The member whose garage you want to view")
         .setRequired(true)
     ),
+
   new SlashCommandBuilder()
     .setName("topgarages")
     .setDescription("Refresh the Top Garages leaderboard"),
+
   new SlashCommandBuilder()
     .setName("setup")
     .setDescription("Set the current channel as the Top Garages channel")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+    .setDefaultMemberPermissions(
+      PermissionFlagsBits.ManageGuild
+    ),
+
   giveawayCommand.data
-  
-].map(c => c.toJSON());
+
+].map(command => command.toJSON());
+
+
+/* =========================
+   DEPLOY COMMANDS
+========================= */
 
 async function deployCommands() {
-  const rest = new REST({ version: "10" }).setToken(config.token);
+  const rest = new REST({
+    version: "10"
+  }).setToken(config.token);
+
   if (config.guildId) {
-    await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), { body: commands });
+    await rest.put(
+      Routes.applicationGuildCommands(
+        config.clientId,
+        config.guildId
+      ),
+      {
+        body: commands
+      }
+    );
+
     console.log("Guild slash commands registered.");
   } else {
-    await rest.put(Routes.applicationCommands(config.clientId), { body: commands });
+    await rest.put(
+      Routes.applicationCommands(config.clientId),
+      {
+        body: commands
+      }
+    );
+
     console.log("Global slash commands registered.");
   }
 }
 
+
+/* =========================
+   VEHICLE UNLOCK SYSTEM
+========================= */
+
 async function checkUnlocks(guild, userId) {
-  const user = getUser(userId, guild.id);
+  const user = getUser(
+    userId,
+    guild.id
+  );
+
   let unlocked = [];
+
   let index = user.vehicle_index;
 
   while (index < vehicles.length) {
     const next = vehicles[index];
-    const hours = user.vc_seconds / 3600;
-    if (hours >= next.vcHours && user.messages >= next.messages) {
+
+    const hours =
+      user.vc_seconds / 3600;
+
+    if (
+      hours >= next.vcHours &&
+      user.messages >= next.messages
+    ) {
       index++;
+
       unlocked.push(next);
-    } else break;
-  }
-
-  if (!unlocked.length) return;
-
-  setVehicleIndex(userId, guild.id, index);
-
-  const member = await guild.members.fetch(userId).catch(() => null);
-  if (member) {
-    const last = unlocked[unlocked.length - 1];
-    const channel = guild.systemChannel;
-    if (channel) {
-      await channel.send(
-        `🎉 **NEW VEHICLE UNLOCKED!**\n` +
-        `${member} has unlocked **${last.emoji} ${last.name}**!\n` +
-        `🏁 Collection: **${index}/${vehicles.length}**`
-      ).catch(() => {});
+    } else {
+      break;
     }
   }
+
+  if (!unlocked.length) {
+    return;
+  }
+
+  setVehicleIndex(
+    userId,
+    guild.id,
+    index
+  );
+
+  const member =
+    await guild.members
+      .fetch(userId)
+      .catch(() => null);
+
+  if (!member) {
+    return;
+  }
+
+  const last =
+    unlocked[unlocked.length - 1];
+
+  const channel =
+    guild.systemChannel;
+
+  if (channel) {
+    await channel.send(
+      `🎉 **NEW VEHICLE UNLOCKED!**\n` +
+      `${member} has unlocked **${last.emoji} ${last.name}**!\n` +
+      `🏁 Collection: **${index}/${vehicles.length}**`
+    ).catch(() => {});
+  }
 }
 
-async function refreshTopGarages(guild, channel) {
-  const rows = topUsers(guild.id, 10);
-  await channel.send({ embeds: [topGaragesEmbed(rows, guild)] });
-}
 
-/*
- * Discord does not send a fresh voiceStateUpdate for members who were already
- * in voice when the bot restarted. Start a new timing session for them.
- */
+/* =========================
+   RESTORE VC SESSIONS
+========================= */
+
 function restoreActiveVoiceSessions() {
   let restored = 0;
 
-  for (const guild of client.guilds.cache.values()) {
-    for (const state of guild.voiceStates.cache.values()) {
-      if (!state.channelId) continue;
+  for (
+    const guild of client.guilds.cache.values()
+  ) {
+    for (
+      const state of guild.voiceStates.cache.values()
+    ) {
+      if (!state.channelId) {
+        continue;
+      }
 
       const member = state.member;
-      if (member?.user?.bot) continue;
 
-      const user = getUser(state.id, guild.id);
+      if (member?.user?.bot) {
+        continue;
+      }
 
-      if (user.last_vc_join === null || user.last_vc_join === undefined) {
-        setVcJoin(state.id, guild.id, Date.now());
+      const user = getUser(
+        state.id,
+        guild.id
+      );
+
+      if (
+        user.last_vc_join === null ||
+        user.last_vc_join === undefined
+      ) {
+        setVcJoin(
+          state.id,
+          guild.id,
+          Date.now()
+        );
+
         restored++;
       }
     }
   }
 
-  console.log(`Restored ${restored} active VC session(s).`);
+  console.log(
+    `Restored ${restored} active VC session(s).`
+  );
 }
+
+
+/* =========================
+   BOT READY
+========================= */
 
 client.once("ready", async () => {
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(
+    `Logged in as ${client.user.tag}`
+  );
+
   try {
     await deployCommands();
-    console.log("Vehicle Life is online.");
+
+    console.log(
+      "Vehicle Life is online."
+    );
+
     restoreActiveVoiceSessions();
+
   } catch (err) {
-    console.error("Slash-command registration failed:", err);
+    console.error(
+      "Slash-command registration failed:",
+      err
+    );
   }
 });
 
-client.on("messageCreate", async message => {
-  if (!message.guild || message.author.bot) return;
 
-  addMessage(message.author.id, message.guild.id, 1);
-  await checkUnlocks(message.guild, message.author.id);
+/* =========================
+   MESSAGE COMMANDS
+========================= */
 
-  if (message.content.startsWith("?warn")) {
-    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-      return message.reply("❌ You don't have permission to warn members.");
+client.on(
+  "messageCreate",
+  async message => {
+
+    if (
+      !message.guild ||
+      message.author.bot
+    ) {
+      return;
     }
 
-    const target = message.mentions.users.first();
 
-    if (!target) {
-      return message.reply("❌ Please mention a user.");
-    }
+    /* =========================
+       MESSAGE TRACKING
+    ========================= */
 
-    const reason =
-      message.content.split(" ").slice(2).join(" ") || "No reason provided";
-
-    return message.channel.send(
-      `⚠️ ${target} has been warned.\nReason: ${reason}`
-    );
-  }
-  if (message.content.startsWith("?unwarn")) {
-  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-    return message.reply("❌ You don't have permission to unwarn members.");
-  }
-
-  const target = message.mentions.users.first();
-
-  if (!target) {
-    return message.reply("❌ Please mention a user.");
-  }
-
-  return message.channel.send(
-    `✅ ${target} has been unwarned.`
-  );
-  }
-  if (message.content.startsWith("?setnick")) {
-  if (!message.member.permissions.has(PermissionFlagsBits.ManageNicknames)) {
-    return message.reply("❌ You don't have permission to change nicknames.");
-  }
-
-  const target = message.mentions.members.first();
-
-  if (!target) {
-    return message.reply("❌ Please mention a user.");
-  }
-
-  const nickname = message.content.split(" ").slice(2).join(" ");
-
-  if (!nickname) {
-    return message.reply("❌ Please provide a nickname.");
-  }
-
-  try {
-    await target.setNickname(nickname);
-
-    return message.channel.send(
-      `✅ Changed ${target}'s nickname to **${nickname}**`
-    );
-  } catch (err) {
-    return message.reply(
-      "❌ I can't change that user's nickname. Check my role position and permissions."
-    );
-  }
-  }
-  if (message.content.startsWith("?mute")) {
-  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-    return message.reply("❌ You don't have permission to mute members.");
-  }
-
-  const target = message.mentions.members.first();
-
-  if (!target) {
-    return message.reply("❌ Please mention a user.");
-  }
-
-  const duration = message.content.split(" ")[2];
-
-  if (!duration) {
-    return message.reply("❌ Please provide a duration (60s, 5m, 4h, 2d).");
-  }
-
-  let ms = 0;
-
-  if (duration.endsWith("s")) ms = parseInt(duration) * 1000;
-  else if (duration.endsWith("m")) ms = parseInt(duration) * 60 * 1000;
-  else if (duration.endsWith("h")) ms = parseInt(duration) * 60 * 60 * 1000;
-  else if (duration.endsWith("d")) ms = parseInt(duration) * 24 * 60 * 60 * 1000;
-  else {
-    return message.reply("❌ Invalid duration. Use s, m, h, or d.");
-  }
-
-  try {
-    await target.timeout(ms);
-
-    return message.channel.send(
-      `🔇 ${target} has been muted for ${duration}.`
-    );
-  } catch (err) {
-    return message.reply(
-      "❌ I can't mute that user. Check my permissions and role position."
-    );
-  }
-}
-
-if (message.content.startsWith("?unmute")) {
-  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-    return message.reply("❌ You don't have permission to unmute members.");
-  }
-
-  const target = message.mentions.members.first();
-
-  if (!target) {
-    return message.reply("❌ Please mention a user.");
-  }
-
-  if (!target.isCommunicationDisabled()) {
-    return message.reply("❌ That user is not muted.");
-  }
-
-  try {
-    await target.timeout(null);
-
-    return message.channel.send(
-      `🔊 ${target} has been unmuted.`
-    );
-  } catch (err) {
-    return message.reply(
-      "❌ I can't unmute that user."
-    );
-  }
-}
-  if (message.content.startsWith("?addinsta")) {
-  const username = message.content.split(" ")[1];
-
-  if (!username) {
-    return message.reply("❌ Please provide an Instagram username.");
-  }
-
-  setInstagram(message.author.id, message.guild.id, username);
-
-const role = message.guild.roles.cache.find(
-  r => r.name === "Instagram user"
-);
-
-if (role) {
-  await message.member.roles.add(role);
-}
-
-return message.reply(`✅ Instagram username set to ${username}`);
-}
-
-if (message.content.startsWith("?removeinsta")) {
-  removeInstagram(message.author.id, message.guild.id);
-
-  const role = message.guild.roles.cache.find(
-    r => r.name === "Instagram user"
-  );
-
-  if (!role) {
-  return message.reply("❌ Role 'Instagram user' not found.");
-}
-
-try {
-  await message.member.roles.remove(role);
-  console.log("Role removed successfully");
-} catch (err) {
-  console.error(err);
-  return message.reply(`❌ Role error: ${err.message}`);
-}
-
-  return message.reply("✅ Instagram username removed.");
-}
-
-
-if (message.content.startsWith("?insta")) {
-  const target = message.mentions.users.first() || message.author;
-
-  const user = getUser(target.id, message.guild.id);
-
-  if (!user.instagram) {
-    return message.reply("❌ No Instagram username set.");
-  }
-
-  return message.channel.send(
-    `📸 ${target.username}'s Instagram:\nhttps://instagram.com/${user.instagram}`
-  );
-}
-
-});
-// Track the latest profile message for each user so it can refresh automatically.
-const activeProfileMessages = new Map();
-
-async function refreshProfileMessage(guildId, userId, channelId, messageId) {
-  try {
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return false;
-
-    const channel = await guild.channels.fetch(channelId).catch(() => null);
-    if (!channel || !channel.isTextBased()) return false;
-
-    const message = await channel.messages.fetch(messageId).catch(() => null);
-    if (!message) return false;
-
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) return false;
-
-    const user = getUser(userId, guildId);
-
-    await message.edit({
-      embeds: [profileEmbed(member, user)],
-      files: profileFiles(user)
-    });
-
-    return true;
-  } catch (err) {
-    console.error("Profile refresh error:", err.message);
-    return false;
-  }
-}
-
-function rememberProfileMessage(guildId, userId, message) {
-  activeProfileMessages.set(`${guildId}:${userId}`, {
-    guildId,
-    userId,
-    channelId: message.channelId,
-    messageId: message.id
-  });
-}
-
-async function refreshAllProfiles() {
-  for (const [key, info] of activeProfileMessages) {
-    const ok = await refreshProfileMessage(
-      info.guildId,
-      info.userId,
-      info.channelId,
-      info.messageId
+    addMessage(
+      message.author.id,
+      message.guild.id,
+      1
     );
 
-    if (!ok) activeProfileMessages.delete(key);
-  }
-}
+    await checkUnlocks(
+      message.guild,
+      message.author.id
+    );
 
-// Refresh profile embeds every minute. This makes the VC timer visibly move
-// while a user remains in voice instead of leaving an old 0.2h message on screen.
-const profileRefreshTimer = setInterval(refreshAllProfiles, 60_000);
-profileRefreshTimer.unref?.();
 
-client.on("voiceStateUpdate", async (oldState, newState) => {
-  try {
-    if (!newState.guild) return;
+    /* =========================
+       PURGE COMMAND
+       ?purge 10
+    ========================= */
 
-    const userId = newState.id;
-    const guildId = newState.guild.id;
+    if (
+      message.content
+        .toLowerCase()
+        .startsWith("?purge")
+    ) {
 
-    const member = newState.member || oldState.member;
-    if (member?.user?.bot) return;
+      if (
+        !message.member.permissions.has(
+          PermissionFlagsBits.ManageMessages
+        )
+      ) {
+        return message.reply(
+          "❌ You don't have permission to delete messages."
+        );
+      }
 
-    const joined = !oldState.channelId && !!newState.channelId;
-    const left = !!oldState.channelId && !newState.channelId;
 
-    if (joined) {
-      const user = getUser(userId, guildId);
+      const args =
+        message.content.trim().split(/\s+/);
 
-      // Never overwrite an already-running session.
-      if (user.last_vc_join === null || user.last_vc_join === undefined) {
-        setVcJoin(userId, guildId, Date.now());
-        console.log(`VC started: ${userId}`);
+      const amount =
+        parseInt(args[1], 10);
+
+
+      if (
+        Number.isNaN(amount) ||
+        amount < 1 ||
+        amount > 100
+      ) {
+        return message.reply(
+          "❌ Usage: `?purge <1-100>`"
+        );
+      }
+
+
+      try {
+
+        const deleted =
+          await message.channel.bulkDelete(
+            amount,
+            true
+          );
+
+
+        await message.delete()
+          .catch(() => {});
+
+
+        const confirmation =
+          await message.channel.send(
+            `🧹 Successfully deleted **${deleted.size}** messages.`
+          );
+
+
+        setTimeout(() => {
+          confirmation
+            .delete()
+            .catch(() => {});
+        }, 3000);
+
+
+      } catch (err) {
+
+        console.error(
+          "Purge error:",
+          err
+        );
+
+        return message.channel.send(
+          "❌ I couldn't delete those messages. Make sure I have **Manage Messages** permission and the messages are eligible for bulk deletion."
+        );
       }
 
       return;
     }
 
-    if (left) {
-      // settleVcSession calculates the elapsed time from the stored join time
-      // and clears it in the same operation. This prevents double-counting.
-      settleVcSession(userId, guildId);
 
-      console.log(`VC ended: ${userId}`);
+    /* =========================
+       WARN
+    ========================= */
 
-      await checkUnlocks(newState.guild, userId);
-    }
+    if (
+      message.content.startsWith("?warn")
+    ) {
 
-    // Moving between VC channels is neither a join nor a leave, so the timer
-    // remains untouched.
-  } catch (err) {
-    console.error("voiceStateUpdate error:", err);
-  }
-});
-client.on("guildMemberUpdate", async (oldMember, newMember) => {
-  const role = newMember.guild.roles.cache.find(
-    r => r.name === "Instagram user"
-  );
-
-  if (!role) return;
-
-  const hadRole = oldMember.roles.cache.has(role.id);
-  const hasRole = newMember.roles.cache.has(role.id);
-
-  if (hadRole && !hasRole) {
-    removeInstagram(newMember.id, newMember.guild.id);
-
-    console.log(
-      `Instagram removed for ${newMember.user.tag} because role was removed`
-    );
-  }
-});
-
-client.on("interactionCreate", async interaction => {
-  if (!interaction.guild) return;
-
-  if (interaction.isButton() && interaction.customId.startsWith("garageview:")) {
-    const [, direction, viewerId, targetId, pageText] = interaction.customId.split(":");
-    if (interaction.user.id !== viewerId) {
-      return interaction.reply({ content: "❌ Only the person who opened this garage can use these buttons.", ephemeral: true });
-    }
-
-    const currentPage = Number(pageText) || 0;
-    const nextPage = direction === "next" ? currentPage + 1 : currentPage - 1;
-    const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
-    if (!targetMember) {
-      return interaction.reply({ content: "❌ That member is no longer in this server.", ephemeral: true });
-    }
-
-    const targetUser = getUser(targetId, interaction.guild.id);
-    const page = garagePage(targetMember, targetUser, nextPage);
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`garageview:prev:${viewerId}:${targetId}:${page.page}`)
-        .setLabel("Previous")
-        .setEmoji("⬅️")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page.page <= 0),
-      new ButtonBuilder()
-        .setCustomId(`garageview:next:${viewerId}:${targetId}:${page.page}`)
-        .setLabel("Next")
-        .setEmoji("➡️")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(page.page >= page.pageCount - 1)
-    );
-
-    return interaction.update({ embeds: page.embeds, files: page.files, components: [row] });
-  }
-
-  if (interaction.isButton() && interaction.customId === "giveaway_join") {
-    const entries = giveawayCommand.giveawayEntries.get(interaction.message.id);
-
-    if (!entries) {
-        return interaction.reply({
-            content: "❌ This giveaway is no longer active.",
-            ephemeral: true
-        });
-    }
-
-    if (entries.has(interaction.user.id)) {
-        return interaction.reply({
-            content: "⚠️ You are already entered in this giveaway!",
-            ephemeral: true
-        });
-    }
-
-    entries.add(interaction.user.id);
-
-    const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-        .setDescription(
-            interaction.message.embeds[0].description.replace(
-                /👥 \*\*Entries:\*\* \d+/,
-                `👥 **Entries:** ${entries.size}`
-            )
+      if (
+        !message.member.permissions.has(
+          PermissionFlagsBits.ModerateMembers
+        )
+      ) {
+        return message.reply(
+          "❌ You don't have permission to warn members."
         );
+      }
 
-    await interaction.message.edit({
-        embeds: [updatedEmbed]
-    });
+      const target =
+        message.mentions.users.first();
 
-    return interaction.reply({
-        content: "🎉 You have successfully entered the giveaway! Good luck! 🍀",
-        ephemeral: true
-    });
-  }
-  if (interaction.isButton() && interaction.customId.startsWith("garage:")) {
-    const [, direction, ownerId, pageText] = interaction.customId.split(":");
-    if (interaction.user.id !== ownerId) {
-      return interaction.reply({ content: "❌ Only the person who opened this garage can use these buttons.", ephemeral: true });
-    }
+      if (!target) {
+        return message.reply(
+          "❌ Please mention a user."
+        );
+      }
 
-    const currentPage = Number(pageText) || 0;
-    const nextPage = direction === "next" ? currentPage + 1 : currentPage - 1;
-    const freshUser = getUser(interaction.user.id, interaction.guild.id);
-    const page = garagePage(interaction.member, freshUser, nextPage);
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`garage:prev:${ownerId}:${page.page}`)
-        .setLabel("Previous")
-        .setEmoji("⬅️")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page.page <= 0),
-      new ButtonBuilder()
-        .setCustomId(`garage:next:${ownerId}:${page.page}`)
-        .setLabel("Next")
-        .setEmoji("➡️")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(page.page >= page.pageCount - 1)
-    );
+      const reason =
+        message.content
+          .split(" ")
+          .slice(2)
+          .join(" ") ||
+        "No reason provided";
 
-    return interaction.update({ embeds: page.embeds, files: page.files, components: [row] });
-  }
-
-  if (!interaction.isChatInputCommand()) return;
-
-  // Acknowledge the slash command immediately so Discord does not time out.
-  if (interaction.commandName === "giveaway") {
-    return giveawayCommand.execute(interaction);
-  }
-  await interaction.deferReply();
-
-  const user = getUser(interaction.user.id, interaction.guild.id);
-
-  if (interaction.commandName === "profile") {
-    await interaction.editReply({
-      embeds: [profileEmbed(interaction.member, user)],
-      files: profileFiles(user)
-    });
-
-    const profileMessage = await interaction.fetchReply().catch(() => null);
-    if (profileMessage) {
-      rememberProfileMessage(
-        interaction.guild.id,
-        interaction.user.id,
-        profileMessage
+      return message.channel.send(
+        `⚠️ ${target} has been warned.\nReason: ${reason}`
       );
     }
 
-    return;
-  }
 
-  if (interaction.commandName === "garage") {
-    const page = garagePage(interaction.member, user, 0);
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`garage:prev:${interaction.user.id}:0`)
-        .setLabel("Previous")
-        .setEmoji("⬅️")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page.page <= 0),
-      new ButtonBuilder()
-        .setCustomId(`garage:next:${interaction.user.id}:0`)
-        .setLabel("Next")
-        .setEmoji("➡️")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(page.page >= page.pageCount - 1)
+    /* =========================
+       UNWARN
+    ========================= */
+
+    if (
+      message.content.startsWith("?unwarn")
+    ) {
+
+      if (
+        !message.member.permissions.has(
+          PermissionFlagsBits.ModerateMembers
+        )
+      ) {
+        return message.reply(
+          "❌ You don't have permission to unwarn members."
+        );
+      }
+
+      const target =
+        message.mentions.users.first();
+
+      if (!target) {
+        return message.reply(
+          "❌ Please mention a user."
+        );
+      }
+
+      return message.channel.send(
+        `✅ ${target} has been unwarned.`
+      );
+    }
+
+
+    /* =========================
+       SET NICKNAME
+    ========================= */
+
+    if (
+      message.content.startsWith("?setnick")
+    ) {
+
+      if (
+        !message.member.permissions.has(
+          PermissionFlagsBits.ManageNicknames
+        )
+      ) {
+        return message.reply(
+          "❌ You don't have permission to change nicknames."
+        );
+      }
+
+      const target =
+        message.mentions.members.first();
+
+      if (!target) {
+        return message.reply(
+          "❌ Please mention a user."
+        );
+      }
+
+      const nickname =
+        message.content
+          .split(" ")
+          .slice(2)
+          .join(" ");
+
+      if (!nickname) {
+        return message.reply(
+          "❌ Please provide a nickname."
+        );
+      }
+
+      try {
+
+        await target.setNickname(
+          nickname
+        );
+
+        return message.channel.send(
+          `✅ Changed ${target}'s nickname to **${nickname}**`
+        );
+
+      } catch (err) {
+
+        return message.reply(
+          "❌ I can't change that user's nickname. Check my role position and permissions."
+        );
+      }
+    }
+
+
+    /* =========================
+       MUTE
+    ========================= */
+
+    if (
+      message.content.startsWith("?mute")
+    ) {
+
+      if (
+        !message.member.permissions.has(
+          PermissionFlagsBits.ModerateMembers
+        )
+      ) {
+        return message.reply(
+          "❌ You don't have permission to mute members."
+        );
+      }
+
+      const target =
+        message.mentions.members.first();
+
+      if (!target) {
+        return message.reply(
+          "❌ Please mention a user."
+        );
+      }
+
+      const duration =
+        message.content
+          .split(" ")[2];
+
+      if (!duration) {
+        return message.reply(
+          "❌ Please provide a duration (60s, 5m, 4h, 2d)."
+        );
+      }
+
+      let ms = 0;
+
+      if (duration.endsWith("s")) {
+        ms =
+          parseInt(duration) *
+          1000;
+
+      } else if (duration.endsWith("m")) {
+        ms =
+          parseInt(duration) *
+          60 *
+          1000;
+
+      } else if (duration.endsWith("h")) {
+        ms =
+          parseInt(duration) *
+          60 *
+          60 *
+          1000;
+
+      } else if (duration.endsWith("d")) {
+        ms =
+          parseInt(duration) *
+          24 *
+          60 *
+          60 *
+          1000;
+
+      } else {
+
+        return message.reply(
+          "❌ Invalid duration. Use s, m, h, or d."
+        );
+      }
+
+      if (!Number.isFinite(ms) || ms <= 0) {
+        return message.reply(
+          "❌ Invalid duration."
+        );
+      }
+
+      try {
+
+        await target.timeout(ms);
+
+        return message.channel.send(
+          `🔇 ${target} has been muted for ${duration}.`
+        );
+
+      } catch (err) {
+
+        return message.reply(
+          "❌ I can't mute that user. Check my permissions and role position."
+        );
+      }
+    }
+
+
+    /* =========================
+       UNMUTE
+    ========================= */
+
+    if (
+      message.content.startsWith("?unmute")
+    ) {
+
+      if (
+        !message.member.permissions.has(
+          PermissionFlagsBits.ModerateMembers
+        )
+      ) {
+        return message.reply(
+          "❌ You don't have permission to unmute members."
+        );
+      }
+
+      const target =
+        message.mentions.members.first();
+
+      if (!target) {
+        return message.reply(
+          "❌ Please mention a user."
+        );
+      }
+
+      if (
+        !target.isCommunicationDisabled()
+      ) {
+        return message.reply(
+          "❌ That user is not muted."
+        );
+      }
+
+      try {
+
+        await target.timeout(null);
+
+        return message.channel.send(
+          `🔊 ${target} has been unmuted.`
+        );
+
+      } catch (err) {
+
+        return message.reply(
+          "❌ I can't unmute that user."
+        );
+      }
+    }
+
+
+    /* =========================
+       ADD INSTAGRAM
+    ========================= */
+
+    if (
+      message.content.startsWith("?addinsta")
+    ) {
+
+      const username =
+        message.content
+          .split(" ")[1];
+
+      if (!username) {
+        return message.reply(
+          "❌ Please provide an Instagram username."
+        );
+      }
+
+      setInstagram(
+        message.author.id,
+        message.guild.id,
+        username
+      );
+
+
+      const role =
+        message.guild.roles.cache.find(
+          r =>
+            r.name === "Instagram user"
+        );
+
+
+      if (role) {
+        await message.member.roles
+          .add(role)
+          .catch(err =>
+            console.error(
+              "Instagram role add error:",
+              err
+            )
+          );
+      }
+
+
+      return message.reply(
+        `✅ Instagram username set to ${username}`
+      );
+    }
+
+
+    /* =========================
+       REMOVE INSTAGRAM
+    ========================= */
+
+    if (
+      message.content.startsWith("?removeinsta")
+    ) {
+
+      removeInstagram(
+        message.author.id,
+        message.guild.id
+      );
+
+
+      const role =
+        message.guild.roles.cache.find(
+          r =>
+            r.name === "Instagram user"
+        );
+
+
+      if (!role) {
+        return message.reply(
+          "❌ Role 'Instagram user' not found."
+        );
+      }
+
+
+      try {
+
+        await message.member.roles
+          .remove(role);
+
+      } catch (err) {
+
+        console.error(err);
+
+        return message.reply(
+          `❌ Role error: ${err.message}`
+        );
+      }
+
+
+      return message.reply(
+        "✅ Instagram username removed."
+      );
+    }
+
+
+    /* =========================
+       VIEW INSTAGRAM
+    ========================= */
+
+    if (
+      message.content.startsWith("?insta")
+    ) {
+
+      const target =
+        message.mentions.users.first() ||
+        message.author;
+
+
+      const user =
+        getUser(
+          target.id,
+          message.guild.id
+        );
+
+
+      if (!user.instagram) {
+        return message.reply(
+          "❌ No Instagram username set."
+        );
+      }
+
+
+      return message.channel.send(
+        `📸 ${target.username}'s Instagram:\nhttps://instagram.com/${user.instagram}`
+      );
+    }
+
+  }
+);
+
+
+/* =========================
+   PROFILE MESSAGE TRACKING
+========================= */
+
+const activeProfileMessages =
+  new Map();
+
+
+async function refreshProfileMessage(
+  guildId,
+  userId,
+  channelId,
+  messageId
+) {
+
+  try {
+
+    const guild =
+      client.guilds.cache.get(
+        guildId
+      );
+
+    if (!guild) {
+      return false;
+    }
+
+
+    const channel =
+      await guild.channels
+        .fetch(channelId)
+        .catch(() => null);
+
+
+    if (
+      !channel ||
+      !channel.isTextBased()
+    ) {
+      return false;
+    }
+
+
+    const message =
+      await channel.messages
+        .fetch(messageId)
+        .catch(() => null);
+
+
+    if (!message) {
+      return false;
+    }
+
+
+    const member =
+      await guild.members
+        .fetch(userId)
+        .catch(() => null);
+
+
+    if (!member) {
+      return false;
+    }
+
+
+    const user =
+      getUser(
+        userId,
+        guildId
+      );
+
+
+    await message.edit({
+      embeds: [
+        profileEmbed(
+          member,
+          user
+        )
+      ],
+
+      files:
+        profileFiles(user)
+    });
+
+
+    return true;
+
+  } catch (err) {
+
+    console.error(
+      "Profile refresh error:",
+      err.message
     );
 
-    return interaction.editReply({
-      embeds: page.embeds,
-      files: page.files,
-      components: [row]
-    });
+    return false;
   }
+}
 
-  if (interaction.commandName === "viewgarage") {
-    const targetUser = interaction.options.getUser("user", true);
-    const targetMember = await interaction.guild.members.fetch(targetUser.id).catch(() => null);
 
-    if (!targetMember) {
-      return interaction.editReply({ content: "❌ That user is not a member of this server.", ephemeral: true });
+function rememberProfileMessage(
+  guildId,
+  userId,
+  message
+) {
+
+  activeProfileMessages.set(
+    `${guildId}:${userId}`,
+    {
+      guildId,
+      userId,
+      channelId:
+        message.channelId,
+      messageId:
+        message.id
+    }
+  );
+}
+
+
+async function refreshAllProfiles() {
+
+  for (
+    const [
+      key,
+      info
+    ] of activeProfileMessages
+  ) {
+
+    const ok =
+      await refreshProfileMessage(
+        info.guildId,
+        info.userId,
+        info.channelId,
+        info.messageId
+      );
+
+
+    if (!ok) {
+      activeProfileMessages.delete(
+        key
+      );
+    }
+  }
+}
+
+
+/* =========================
+   PROFILE REFRESH TIMER
+========================= */
+
+const profileRefreshTimer =
+  setInterval(
+    refreshAllProfiles,
+    60_000
+  );
+
+profileRefreshTimer.unref?.();
+
+
+/* =========================
+   VOICE TRACKING
+========================= */
+
+client.on(
+  "voiceStateUpdate",
+  async (
+    oldState,
+    newState
+  ) => {
+
+    try {
+
+      if (!newState.guild) {
+        return;
+      }
+
+
+      const userId =
+        newState.id;
+
+      const guildId =
+        newState.guild.id;
+
+
+      const member =
+        newState.member ||
+        oldState.member;
+
+
+      if (member?.user?.bot) {
+        return;
+      }
+
+
+      const joined =
+        !oldState.channelId &&
+        !!newState.channelId;
+
+
+      const left =
+        !!oldState.channelId &&
+        !newState.channelId;
+
+
+      if (joined) {
+
+        const user =
+          getUser(
+            userId,
+            guildId
+          );
+
+
+        if (
+          user.last_vc_join === null ||
+          user.last_vc_join === undefined
+        ) {
+
+          setVcJoin(
+            userId,
+            guildId,
+            Date.now()
+          );
+
+          console.log(
+            `VC started: ${userId}`
+          );
+        }
+
+
+        return;
+      }
+
+
+      if (left) {
+
+        settleVcSession(
+          userId,
+          guildId
+        );
+
+
+        console.log(
+          `VC ended: ${userId}`
+        );
+
+
+        await checkUnlocks(
+          newState.guild,
+          userId
+        );
+      }
+
+    } catch (err) {
+
+      console.error(
+        "voiceStateUpdate error:",
+        err
+      );
+    }
+  }
+);
+
+
+/* =========================
+   INSTAGRAM ROLE SYNC
+========================= */
+
+client.on(
+  "guildMemberUpdate",
+  async (
+    oldMember,
+    newMember
+  ) => {
+
+    const role =
+      newMember.guild.roles.cache.find(
+        r =>
+          r.name === "Instagram user"
+      );
+
+
+    if (!role) {
+      return;
     }
 
-    const targetData = getUser(targetUser.id, interaction.guild.id);
-    const page = garagePage(targetMember, targetData, 0);
-    const viewerId = interaction.user.id;
-    const targetId = targetUser.id;
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`garageview:prev:${viewerId}:${targetId}:0`)
-        .setLabel("Previous")
-        .setEmoji("⬅️")
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page.page <= 0),
-      new ButtonBuilder()
-        .setCustomId(`garageview:next:${viewerId}:${targetId}:0`)
-        .setLabel("Next")
-        .setEmoji("➡️")
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(page.page >= page.pageCount - 1)
-    );
+    const hadRole =
+      oldMember.roles.cache.has(
+        role.id
+      );
 
-    return interaction.editReply({
-      embeds: page.embeds,
-      files: page.files,
-      components: [row]
-    });
-  }
 
-  if (interaction.commandName === "topgarages") {
-    return interaction.editReply({ embeds: [topGaragesEmbed(topUsers(interaction.guild.id, 10), interaction.guild)] });
-  }
-  if (interaction.commandName === "setup") {
-    if (!interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) {
-      return interaction.editReply({ content: "❌ You need Manage Server permission.", ephemeral: true });
+    const hasRole =
+      newMember.roles.cache.has(
+        role.id
+      );
+
+
+    if (
+      hadRole &&
+      !hasRole
+    ) {
+
+      removeInstagram(
+        newMember.id,
+        newMember.guild.id
+      );
+
+
+      console.log(
+        `Instagram removed for ${newMember.user.tag} because role was removed`
+      );
     }
-    if (interaction.channel.type !== ChannelType.GuildText) {
-      return interaction.editReply({ content: "❌ Run this command inside a text channel.", ephemeral: true });
-    }
-    return interaction.editReply({
-      content:
-        `✅ **Top Garages channel configured!**\n` +
-        `Use \`/topgarages\` here to publish the leaderboard.\n\n` +
-        `For automatic updates, put this channel ID in \`TOP_GARAGES_CHANNEL_ID\` in your .env.`
-    });
   }
-});
+);
+
+
+/* =========================
+   INTERACTION HANDLER
+========================= */
+
+client.on(
+  "interactionCreate",
+  async interaction => {
+
+    try {
+
+      if (!interaction.guild) {
+        return;
+      }
+
+
+      /* =========================
+         GARAGE VIEW BUTTONS
+      ========================= */
+
+      if (
+        interaction.isButton() &&
+        interaction.customId.startsWith(
+          "garageview:"
+        )
+      ) {
+
+        const [
+          ,
+          direction,
+          viewerId,
+          targetId,
+          pageText
+        ] =
+          interaction.customId.split(":");
+
+
+        if (
+          interaction.user.id !==
+          viewerId
+        ) {
+
+          return interaction.reply({
+            content:
+              "❌ Only the person who opened this garage can use these buttons.",
+            ephemeral: true
+          });
+        }
+
+
+        const currentPage =
+          Number(pageText) || 0;
+
+
+        const nextPage =
+          direction === "next"
+            ? currentPage + 1
+            : currentPage - 1;
+
+
+        const targetMember =
+          await interaction.guild.members
+            .fetch(targetId)
+            .catch(() => null);
+
+
+        if (!targetMember) {
+
+          return interaction.reply({
+            content:
+              "❌ That member is no longer in this server.",
+            ephemeral: true
+          });
+        }
+
+
+        const targetUser =
+          getUser(
+            targetId,
+            interaction.guild.id
+          );
+
+
+        const page =
+          garagePage(
+            targetMember,
+            targetUser,
+            nextPage
+          );
+
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garageview:prev:${viewerId}:${targetId}:${page.page}`
+                )
+                .setLabel("Previous")
+                .setEmoji("⬅️")
+                .setStyle(
+                  ButtonStyle.Secondary
+                )
+                .setDisabled(
+                  page.page <= 0
+                ),
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garageview:next:${viewerId}:${targetId}:${page.page}`
+                )
+                .setLabel("Next")
+                .setEmoji("➡️")
+                .setStyle(
+                  ButtonStyle.Primary
+                )
+                .setDisabled(
+                  page.page >=
+                  page.pageCount - 1
+                )
+            );
+
+
+        return interaction.update({
+          embeds: page.embeds,
+          files: page.files,
+          components: [row]
+        });
+      }
+
+
+      /* =========================
+         GIVEAWAY JOIN BUTTON
+      ========================= */
+
+      if (
+        interaction.isButton() &&
+        interaction.customId ===
+          "giveaway_join"
+      ) {
+
+        const entries =
+          giveawayCommand.giveawayEntries?.get(
+            interaction.message.id
+          );
+
+
+        if (!entries) {
+
+          return interaction.reply({
+            content:
+              "❌ This giveaway is no longer active.",
+            ephemeral: true
+          });
+        }
+
+
+        if (
+          entries.has(
+            interaction.user.id
+          )
+        ) {
+
+          return interaction.reply({
+            content:
+              "⚠️ You are already entered in this giveaway!",
+            ephemeral: true
+          });
+        }
+
+
+        entries.add(
+          interaction.user.id
+        );
+
+
+        const oldEmbed =
+          interaction.message.embeds[0];
+
+
+        if (oldEmbed) {
+
+          const oldDescription =
+            oldEmbed.description || "";
+
+
+          const newDescription =
+            oldDescription.replace(
+              /👥 \*\*Entries:\*\* \d+/,
+              `👥 **Entries:** ${entries.size}`
+            );
+
+
+          const updatedEmbed =
+            EmbedBuilder
+              .from(oldEmbed)
+              .setDescription(
+                newDescription
+              );
+
+
+          await interaction.message.edit({
+            embeds: [
+              updatedEmbed
+            ]
+          });
+        }
+
+
+        return interaction.reply({
+          content:
+            "🎉 You have successfully entered the giveaway! Good luck! 🍀",
+          ephemeral: true
+        });
+      }
+
+
+      /* =========================
+         PERSONAL GARAGE BUTTONS
+      ========================= */
+
+      if (
+        interaction.isButton() &&
+        interaction.customId.startsWith(
+          "garage:"
+        )
+      ) {
+
+        const [
+          ,
+          direction,
+          ownerId,
+          pageText
+        ] =
+          interaction.customId.split(":");
+
+
+        if (
+          interaction.user.id !==
+          ownerId
+        ) {
+
+          return interaction.reply({
+            content:
+              "❌ Only the person who opened this garage can use these buttons.",
+            ephemeral: true
+          });
+        }
+
+
+        const currentPage =
+          Number(pageText) || 0;
+
+
+        const nextPage =
+          direction === "next"
+            ? currentPage + 1
+            : currentPage - 1;
+
+
+        const freshUser =
+          getUser(
+            interaction.user.id,
+            interaction.guild.id
+          );
+
+
+        const page =
+          garagePage(
+            interaction.member,
+            freshUser,
+            nextPage
+          );
+
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garage:prev:${ownerId}:${page.page}`
+                )
+                .setLabel("Previous")
+                .setEmoji("⬅️")
+                .setStyle(
+                  ButtonStyle.Secondary
+                )
+                .setDisabled(
+                  page.page <= 0
+                ),
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garage:next:${ownerId}:${page.page}`
+                )
+                .setLabel("Next")
+                .setEmoji("➡️")
+                .setStyle(
+                  ButtonStyle.Primary
+                )
+                .setDisabled(
+                  page.page >=
+                  page.pageCount - 1
+                )
+            );
+
+
+        return interaction.update({
+          embeds: page.embeds,
+          files: page.files,
+          components: [row]
+        });
+      }
+
+
+      /* =========================
+         SLASH COMMAND CHECK
+      ========================= */
+
+      if (
+        !interaction.isChatInputCommand()
+      ) {
+        return;
+      }
+
+
+      /* =========================
+         GIVEAWAY SLASH COMMAND
+         MUST HAPPEN BEFORE DEFER
+      ========================= */
+
+      if (
+        interaction.commandName ===
+        "giveaway"
+      ) {
+
+        try {
+
+          return await giveawayCommand.execute(
+            interaction
+          );
+
+        } catch (err) {
+
+          console.error(
+            "Giveaway command error:",
+            err
+          );
+
+
+          if (
+            interaction.replied ||
+            interaction.deferred
+          ) {
+
+            return interaction
+              .editReply({
+                content:
+                  "❌ An error occurred while creating the giveaway."
+              })
+              .catch(() => {});
+          }
+
+
+          return interaction
+            .reply({
+              content:
+                "❌ An error occurred while creating the giveaway.",
+              ephemeral: true
+            })
+            .catch(() => {});
+        }
+      }
+
+
+      /* =========================
+         NORMAL SLASH COMMANDS
+      ========================= */
+
+      await interaction.deferReply();
+
+
+      const user =
+        getUser(
+          interaction.user.id,
+          interaction.guild.id
+        );
+
+
+      /* =========================
+         PROFILE
+      ========================= */
+
+      if (
+        interaction.commandName ===
+        "profile"
+      ) {
+
+        await interaction.editReply({
+          embeds: [
+            profileEmbed(
+              interaction.member,
+              user
+            )
+          ],
+
+          files:
+            profileFiles(user)
+        });
+
+
+        const profileMessage =
+          await interaction
+            .fetchReply()
+            .catch(() => null);
+
+
+        if (profileMessage) {
+
+          rememberProfileMessage(
+            interaction.guild.id,
+            interaction.user.id,
+            profileMessage
+          );
+        }
+
+
+        return;
+      }
+
+
+      /* =========================
+         GARAGE
+      ========================= */
+
+      if (
+        interaction.commandName ===
+        "garage"
+      ) {
+
+        const page =
+          garagePage(
+            interaction.member,
+            user,
+            0
+          );
+
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garage:prev:${interaction.user.id}:0`
+                )
+                .setLabel("Previous")
+                .setEmoji("⬅️")
+                .setStyle(
+                  ButtonStyle.Secondary
+                )
+                .setDisabled(
+                  page.page <= 0
+                ),
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garage:next:${interaction.user.id}:0`
+                )
+                .setLabel("Next")
+                .setEmoji("➡️")
+                .setStyle(
+                  ButtonStyle.Primary
+                )
+                .setDisabled(
+                  page.page >=
+                  page.pageCount - 1
+                )
+            );
+
+
+        return interaction.editReply({
+          embeds: page.embeds,
+          files: page.files,
+          components: [row]
+        });
+      }
+
+
+      /* =========================
+         VIEW GARAGE
+      ========================= */
+
+      if (
+        interaction.commandName ===
+        "viewgarage"
+      ) {
+
+        const targetUser =
+          interaction.options.getUser(
+            "user",
+            true
+          );
+
+
+        const targetMember =
+          await interaction.guild.members
+            .fetch(targetUser.id)
+            .catch(() => null);
+
+
+        if (!targetMember) {
+
+          return interaction.editReply({
+            content:
+              "❌ That user is not a member of this server.",
+            ephemeral: true
+          });
+        }
+
+
+        const targetData =
+          getUser(
+            targetUser.id,
+            interaction.guild.id
+          );
+
+
+        const page =
+          garagePage(
+            targetMember,
+            targetData,
+            0
+          );
+
+
+        const viewerId =
+          interaction.user.id;
+
+
+        const targetId =
+          targetUser.id;
+
+
+        const row =
+          new ActionRowBuilder()
+            .addComponents(
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garageview:prev:${viewerId}:${targetId}:0`
+                )
+                .setLabel("Previous")
+                .setEmoji("⬅️")
+                .setStyle(
+                  ButtonStyle.Secondary
+                )
+                .setDisabled(
+                  page.page <= 0
+                ),
+
+              new ButtonBuilder()
+                .setCustomId(
+                  `garageview:next:${viewerId}:${targetId}:0`
+                )
+                .setLabel("Next")
+                .setEmoji("➡️")
+                .setStyle(
+                  ButtonStyle.Primary
+                )
+                .setDisabled(
+                  page.page >=
+                  page.pageCount - 1
+                )
+            );
+
+
+        return interaction.editReply({
+          embeds: page.embeds,
+          files: page.files,
+          components: [row]
+        });
+      }
+
+
+      /* =========================
+         TOP GARAGES
+      ========================= */
+
+      if (
+        interaction.commandName ===
+        "topgarages"
+      ) {
+
+        return interaction.editReply({
+          embeds: [
+            topGaragesEmbed(
+              topUsers(
+                interaction.guild.id,
+                10
+              ),
+              interaction.guild
+            )
+          ]
+        });
+      }
+
+
+      /* =========================
+         SETUP
+      ========================= */
+
+      if (
+        interaction.commandName ===
+        "setup"
+      ) {
+
+        if (
+          !interaction.memberPermissions.has(
+            PermissionFlagsBits.ManageGuild
+          )
+        ) {
+
+          return interaction.editReply({
+            content:
+              "❌ You need Manage Server permission.",
+            ephemeral: true
+          });
+        }
+
+
+        if (
+          interaction.channel.type !==
+          ChannelType.GuildText
+        ) {
+
+          return interaction.editReply({
+            content:
+              "❌ Run this command inside a text channel.",
+            ephemeral: true
+          });
+        }
+
+
+        return interaction.editReply({
+          content:
+            `✅ **Top Garages channel configured!**\n` +
+            `Use \`/topgarages\` here to publish the leaderboard.\n\n` +
+            `For automatic updates, put this channel ID in \`TOP_GARAGES_CHANNEL_ID\` in your .env.`
+        });
+      }
+
+    } catch (err) {
+
+      console.error(
+        "Interaction error:",
+        err
+      );
+
+
+      if (
+        interaction.isRepliable()
+      ) {
+
+        if (
+          interaction.replied ||
+          interaction.deferred
+        ) {
+
+          await interaction
+            .editReply({
+              content:
+                "❌ Something went wrong while processing this command."
+            })
+            .catch(() => {});
+
+        } else {
+
+          await interaction
+            .reply({
+              content:
+                "❌ Something went wrong while processing this command.",
+              ephemeral: true
+            })
+            .catch(() => {});
+        }
+      }
+    }
+  }
+);
+
+
+/* =========================
+   START BOT
+========================= */
 
 async function start() {
+
   try {
+
     await initDb();
-    await client.login(config.token);
+
+    await client.login(
+      config.token
+    );
+
   } catch (err) {
-    console.error("Startup failed:", err);
+
+    console.error(
+      "Startup failed:",
+      err
+    );
+
     process.exit(1);
   }
 }
 
+
 start();
 
-process.on("unhandledRejection", err => console.error("Unhandled promise rejection:", err));
-process.on("uncaughtException", err => console.error("Uncaught exception:", err));
+
+/* =========================
+   ERROR HANDLERS
+========================= */
+
+process.on(
+  "unhandledRejection",
+  err =>
+    console.error(
+      "Unhandled promise rejection:",
+      err
+    )
+);
+
+
+process.on(
+  "uncaughtException",
+  err =>
+    console.error(
+      "Uncaught exception:",
+      err
+    )
+);
+
+
+/* =========================
+   SHUTDOWN
+========================= */
 
 async function shutdown(signal) {
-  console.log(`${signal} received. Saving data and shutting down...`);
-  try { await closeDb(); } catch (err) { console.error("Database shutdown error:", err.message); }
-  try { client.destroy(); } catch {}
+
+  console.log(
+    `${signal} received. Saving data and shutting down...`
+  );
+
+
+  try {
+
+    await closeDb();
+
+  } catch (err) {
+
+    console.error(
+      "Database shutdown error:",
+      err.message
+    );
+  }
+
+
+  try {
+
+    client.destroy();
+
+  } catch {}
+  
+
   process.exit(0);
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+
+process.on(
+  "SIGINT",
+  () => shutdown("SIGINT")
+);
+
+
+process.on(
+  "SIGTERM",
+  () => shutdown("SIGTERM")
+);
