@@ -300,6 +300,10 @@ if (message.content.startsWith("?unmute")) {
     return message.reply("❌ Please mention a user.");
   }
 
+  if (!target.isCommunicationDisabled()) {
+    return message.reply("❌ That user is not muted.");
+  }
+
   try {
     await target.timeout(null);
 
@@ -311,6 +315,7 @@ if (message.content.startsWith("?unmute")) {
       "❌ I can't unmute that user."
     );
   }
+}
 }
 });
 // Track the latest profile message for each user so it can refresh automatically.
