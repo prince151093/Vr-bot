@@ -534,6 +534,36 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (interaction.isButton() && interaction.customId === "giveaway_join") {
+    const entries = giveawayCommand.giveawayEntries.get(interaction.message.id);
+
+    if (!entries) {
+        return interaction.reply({
+            content: "❌ This giveaway is no longer active.",
+            ephemeral: true
+        });
+    }
+
+    if (entries.has(interaction.user.id)) {
+        return interaction.reply({
+            content: "⚠️ You are already entered in this giveaway!",
+            ephemeral: true
+        });
+    }
+
+    entries.add(interaction.user.id);
+
+    const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+        .setDescription(
+            interaction.message.embeds[0].description.replace(
+                /👥 \*\*Entries:\*\* \d+/,
+                `👥 **Entries:** ${entries.size}`
+            )
+        );
+
+    await interaction.message.edit({
+        embeds: [updatedEmbed]
+    });
+
     return interaction.reply({
         content: "🎉 You have successfully entered the giveaway! Good luck! 🍀",
         ephemeral: true
