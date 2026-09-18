@@ -99,6 +99,7 @@ function ensureUser(userId, guildId) {
       vc_seconds: 0,
       vehicle_index: 0,
       last_vc_join: null,
+      instagram: null, 
       updated_at: Math.floor(Date.now() / 1000)
     };
 
@@ -136,7 +137,7 @@ function update(userId, guildId, changes) {
 
   Object.assign(user, changes, {
     updated_at: Math.floor(Date.now() / 1000),
-instagram: null
+
   });
 
   queueSave(user);
