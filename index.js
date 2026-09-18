@@ -183,8 +183,28 @@ client.once("ready", async () => {
 
 client.on("messageCreate", async message => {
   if (!message.guild || message.author.bot) return;
+
   addMessage(message.author.id, message.guild.id, 1);
   await checkUnlocks(message.guild, message.author.id);
+
+  if (message.content.startsWith("?warn")) {
+    if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+      return message.reply("❌ You don't have permission to warn members.");
+    }
+
+    const target = message.mentions.users.first();
+
+    if (!target) {
+      return message.reply("❌ Please mention a user.");
+    }
+
+    const reason =
+      message.content.split(" ").slice(2).join(" ") || "No reason provided";
+
+    return message.channel.send(
+      `⚠️ ${target} has been warned.\nReason: ${reason}`
+    );
+  }
 });
 
 // Track the latest profile message for each user so it can refresh automatically.
