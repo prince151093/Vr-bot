@@ -34,7 +34,7 @@ function normalizeUser(row) {
         ? null
         : Number(row.last_vc_join),
     updated_at: Number(row.updated_at || 0),
-instagram: row.instagram || null
+    instagram: row.instagram || null
   };
 }
 
@@ -136,8 +136,7 @@ function update(userId, guildId, changes) {
   const user = ensureUser(userId, guildId);
 
   Object.assign(user, changes, {
-    updated_at: Math.floor(Date.now() / 1000),
-
+    updated_at: Math.floor(Date.now() / 1000)
   });
 
   queueSave(user);
@@ -260,7 +259,7 @@ module.exports = {
   settleVcSession,
   setVehicleIndex,
   topUsers,
-setInstagram,
-removeInstagram,
+  setInstagram,
+  removeInstagram,
 close
 };
