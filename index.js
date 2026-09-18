@@ -1251,6 +1251,7 @@ client.on(
 client.on(
   "interactionCreate",
   async interaction => {
+    console.log(`INTERACTION RECEIVED: ${interaction.type} ${interaction.commandName || interaction.customId || "unknown"}`);
 
     try {
 
