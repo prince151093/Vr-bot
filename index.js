@@ -350,8 +350,8 @@ if (message.content.startsWith("?removeinsta")) {
 }
 
 try {
-  await message.member.roles.add(role);
-  console.log("Role added successfully");
+  await message.member.roles.remove(role);
+  console.log("Role removed successfully");
 } catch (err) {
   console.error(err);
   return message.reply(`❌ Role error: ${err.message}`);
