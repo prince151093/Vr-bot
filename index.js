@@ -25,6 +25,8 @@ const {
   clearVcJoin,
   setVehicleIndex,
   topUsers,
+  setinstagram, 
+  removeinstagram, 
   close: closeDb,
   init: initDb
 } = require("./db");
@@ -315,6 +317,37 @@ if (message.content.startsWith("?unmute")) {
       "❌ I can't unmute that user."
     );
   }
+}
+  if (message.content.startsWith("?addinsta")) {
+  const username = message.content.split(" ")[1];
+
+  if (!username) {
+    return message.reply("❌ Please provide an Instagram username.");
+  }
+
+  setInstagram(message.author.id, message.guild.id, username);
+
+  return message.reply(`✅ Instagram username set to ${username}`);
+}
+
+if (message.content.startsWith("?removeinsta")) {
+  removeInstagram(message.author.id, message.guild.id);
+
+  return message.reply("✅ Instagram username removed.");
+}
+
+if (message.content.startsWith("?insta")) {
+  const target = message.mentions.users.first() || message.author;
+
+  const user = getUser(target.id, message.guild.id);
+
+  if (!user.instagram) {
+    return message.reply("❌ No Instagram username set.");
+  }
+
+  return message.channel.send(
+    `📸 ${target.username}'s Instagram:\nhttps://instagram.com/${user.instagram}`
+  );
 }
 
 });
