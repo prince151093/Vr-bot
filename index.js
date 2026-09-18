@@ -564,6 +564,9 @@ client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   // Acknowledge the slash command immediately so Discord does not time out.
+  if (interaction.commandName === "giveaway") {
+    return giveawayCommand.execute(interaction);
+  }
   await interaction.deferReply();
 
   const user = getUser(interaction.user.id, interaction.guild.id);
@@ -647,10 +650,6 @@ client.on("interactionCreate", async interaction => {
 
   if (interaction.commandName === "topgarages") {
     return interaction.editReply({ embeds: [topGaragesEmbed(topUsers(interaction.guild.id, 10), interaction.guild)] });
-  }
-
-  if (interaction.commandName === "giveaway") {
-  return giveawayCommand.execute(interaction);
   }
   if (interaction.commandName === "setup") {
     if (!interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) {
