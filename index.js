@@ -1817,11 +1817,13 @@ async function start() {
 
   try {
 
-    await initDb();
+    console.log("START: Initializing database...");
+await initDb();
+console.log("START: Database initialized.");
 
-    await client.login(
-      config.token
-    );
+console.log("START: Attempting Discord login...");
+await client.login(config.token);
+console.log("START: Discord login() completed.");
 
   } catch (err) {
 
