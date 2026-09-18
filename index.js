@@ -96,7 +96,9 @@ const commands = [
   new SlashCommandBuilder()
     .setName("setup")
     .setDescription("Set the current channel as the Top Garages channel")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+  giveawayCommand.data
+  
 ].map(c => c.toJSON());
 
 async function deployCommands() {
@@ -647,6 +649,9 @@ client.on("interactionCreate", async interaction => {
     return interaction.editReply({ embeds: [topGaragesEmbed(topUsers(interaction.guild.id, 10), interaction.guild)] });
   }
 
+  if (interaction.commandName === "giveaway") {
+  return giveawayCommand.execute(interaction);
+  }
   if (interaction.commandName === "setup") {
     if (!interaction.memberPermissions.has(PermissionFlagsBits.ManageGuild)) {
       return interaction.editReply({ content: "❌ You need Manage Server permission.", ephemeral: true });
