@@ -206,7 +206,21 @@ client.on("messageCreate", async message => {
     );
   }
 });
+ if (message.content.startsWith("?unwarn")) {
+  if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    return message.reply("❌ You don't have permission to unwarn members.");
+  }
 
+  const target = message.mentions.users.first();
+
+  if (!target) {
+    return message.reply("❌ Please mention a user.");
+  }
+
+  return message.channel.send(
+    `✅ ${target} has been unwarned.`
+  );
+ }
 // Track the latest profile message for each user so it can refresh automatically.
 const activeProfileMessages = new Map();
 
