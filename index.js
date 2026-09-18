@@ -25,8 +25,8 @@ const {
   clearVcJoin,
   setVehicleIndex,
   topUsers,
-  setinstagram, 
-  removeinstagram, 
+  setInstagram, 
+  removeInstagram, 
   close: closeDb,
   init: initDb
 } = require("./db");
