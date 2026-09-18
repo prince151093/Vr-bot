@@ -316,7 +316,7 @@ if (message.content.startsWith("?unmute")) {
     );
   }
 }
-}
+
 });
 // Track the latest profile message for each user so it can refresh automatically.
 const activeProfileMessages = new Map();
